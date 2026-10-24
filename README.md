@@ -146,42 +146,191 @@ export const FIRMWARE_KEY_MAP = {
 Here is a ready-to-flash C++ snippet for the ESP32 to push sensor readings directly to your **Firebase Realtime Database** endpoint:
 
 ```cpp
+#include <Wire.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <ArduinoJson.h>
+#include <TinyGPSPlus.h>
 
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+// ================= CONFIG =================
+const char* WIFI_SSID = "moto edge 50 neo";       // <-- ADD THIS
+const char* WIFI_PASS = "11111111";   // <-- ADD THIS
+const char* DB_URL    = "https://roadsense-2b385-default-rtdb.firebaseio.com";
 
-// Your Firebase Realtime Database REST endpoint
-const char* rtdbUrl = "https://roadsense-2b385-default-rtdb.firebaseio.com/readings.json";
+#define TEST_MODE 1   // 1 = fake coordinates when GPS has no fix (indoor testing), 0 = real use only
+const double TEST_LAT = 16.4971, TEST_LNG = 80.4997;
 
-void sendPotholeTelemetry(float lat, float lng, float peakG, float speedKmH) {
-  if (WiFi.status() != WL_CONNECTED) return;
+const float THRESH_G = 0.6;               // deviation from 1g that counts as a hit
+const float MED_G    = 1.0;
+const float HIGH_G   = 1.8;
+const unsigned long COOLDOWN_MS = 3000;   // ignore repeat triggers
+const unsigned long WINDOW_MS   = 150;    // peak capture window
 
+#define MPU_ADDR 0x68
+#define GPS_RX 16   // ESP32 RX2 <- NEO-6M TX
+#define GPS_TX 17   // ESP32 TX2 -> NEO-6M RX
+// ==========================================
+
+TinyGPSPlus gps;
+
+struct Event {
+  double lat, lng;
+  float peak;
+  const char* sev;
+  char ts[24];
+};
+
+Event queueBuf[20];
+int qCount = 0;
+unsigned long lastHit = 0, lastWifiTry = 0;
+
+void mpuInit() {
+  Wire.begin(21, 22);
+  Wire.setClock(400000);
+  Wire.beginTransmission(MPU_ADDR); Wire.write(0x6B); Wire.write(0x00); Wire.endTransmission(); // wake up
+  Wire.beginTransmission(MPU_ADDR); Wire.write(0x1C); Wire.write(0x10); Wire.endTransmission(); // +-8g range
+  Wire.beginTransmission(MPU_ADDR); Wire.write(0x1A); Wire.write(0x03); Wire.endTransmission(); // low-pass filter
+}
+
+float readAccelMagG() {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x3B);
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_ADDR, 6);
+  int16_t ax = Wire.read() << 8 | Wire.read();
+  int16_t ay = Wire.read() << 8 | Wire.read();
+  int16_t az = Wire.read() << 8 | Wire.read();
+  float x = ax / 4096.0, y = ay / 4096.0, z = az / 4096.0;   // 4096 LSB/g at +-8g
+  return sqrt(x * x + y * y + z * z);
+}
+
+void feedGPS() {
+  while (Serial2.available()) gps.encode(Serial2.read());
+}
+
+bool sendEvent(const Event& e) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  WiFiClientSecure client;
+  client.setInsecure();   // fine for a demo
   HTTPClient http;
-  http.begin(rtdbUrl);
+  http.begin(client, String(DB_URL) + "/potholes.json");
   http.addHeader("Content-Type", "application/json");
 
-  // Format telemetry payload
-  StaticJsonDocument<256> doc;
-  doc["deviceId"] = "ESP32_NODE_01";
-  doc["lat"] = lat;
-  doc["lng"] = lng;
-  doc["magnitude"] = peakG;
-  doc["speed"] = speedKmH;
-  doc["timestamp"] = "2026-10-23T03:30:00Z";
+  char body[200];
+  snprintf(body, sizeof(body),
+           "{\"lat\":%.6f,\"lng\":%.6f,\"severity\":\"%s\",\"peak_g\":%.2f,\"ts\":\"%s\"}",
+           e.lat, e.lng, e.sev, e.peak, e.ts);
 
-  String requestBody;
-  serializeJson(doc, requestBody);
-
-  int httpResponseCode = http.POST(requestBody);
-  if (httpResponseCode > 0) {
-    Serial.printf("[HTTP] Pothole telemetry sent successfully! Response code: %d\n", httpResponseCode);
-  } else {
-    Serial.printf("[HTTP] Error sending telemetry: %s\n", http.errorToString(httpResponseCode).c_str());
-  }
+  int code = http.POST(body);
   http.end();
+  Serial.printf("POST -> %d\n", code);
+  return code == 200;
+}
+
+void flushQueue() {
+  while (qCount > 0) {
+    if (!sendEvent(queueBuf[0])) break;
+    for (int i = 1; i < qCount; i++) queueBuf[i - 1] = queueBuf[i];
+    qCount--;
+  }
+}
+
+void handleHit(float peak) {
+  Event e;
+  e.peak = peak;
+  e.sev = peak >= HIGH_G ? "high" : (peak >= MED_G ? "medium" : "low");
+
+  if (gps.location.isValid() && gps.location.age() < 3000) {
+    e.lat = gps.location.lat();
+    e.lng = gps.location.lng();
+  } else {
+#if TEST_MODE
+    e.lat = TEST_LAT + random(-50, 50) / 100000.0;
+    e.lng = TEST_LNG + random(-50, 50) / 100000.0;
+#else
+    Serial.println("Hit ignored: no GPS fix");
+    return;
+#endif
+  }
+
+  if (gps.date.isValid() && gps.time.isValid() && gps.date.year() > 2020) {
+    snprintf(e.ts, sizeof(e.ts), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+             gps.date.year(), gps.date.month(), gps.date.day(),
+             gps.time.hour(), gps.time.minute(), gps.time.second());
+  } else {
+    snprintf(e.ts, sizeof(e.ts), "uptime-%lus", millis() / 1000);
+  }
+
+  Serial.printf("POTHOLE %s peak=%.2fg at %.6f,%.6f\n", e.sev, e.peak, e.lat, e.lng);
+
+  if (qCount < 20) queueBuf[qCount++] = e;   // queue first, then try to send
+  flushQueue();
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+
+  Serial2.setRxBufferSize(1024);
+  Serial2.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX);
+  mpuInit();
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.print("Connecting WiFi");
+  unsigned long t = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
+    delay(300);
+    Serial.print(".");
+  }
+  Serial.println(WiFi.status() == WL_CONNECTED ? "\nWiFi OK" : "\nWiFi not connected (will keep retrying)");
+}
+
+void loop() {
+  feedGPS();
+
+  // keep WiFi alive
+  if (WiFi.status() != WL_CONNECTED && millis() - lastWifiTry > 10000) {
+    lastWifiTry = millis();
+    WiFi.disconnect();
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+  }
+
+  float dev = fabs(readAccelMagG() - 1.0);
+
+  if (dev > THRESH_G && millis() - lastHit > COOLDOWN_MS) {
+    float peak = dev;
+    unsigned long start = millis();
+    while (millis() - start < WINDOW_MS) {      // capture the peak of the impact
+      feedGPS();
+      float d = fabs(readAccelMagG() - 1.0);
+      if (d > peak) peak = d;
+      delay(2);
+    }
+    lastHit = millis();
+    handleHit(peak);
+  }
+
+  // retry queued events every 15 s
+  static unsigned long lastFlush = 0;
+  if (qCount > 0 && millis() - lastFlush > 15000) {
+    lastFlush = millis();
+    flushQueue();
+  }
+
+  // status line every 5 s
+  static unsigned long lastStat = 0;
+  if (millis() - lastStat > 5000) {
+    lastStat = millis();
+    Serial.printf("sats=%d fix=%s wifi=%s queued=%d\n",
+                  gps.satellites.value(),
+                  gps.location.isValid() ? "yes" : "no",
+                  WiFi.status() == WL_CONNECTED ? "yes" : "no",
+                  qCount);
+  }
+
+  delay(5);   // ~200 Hz sampling
 }
 ```
 
