@@ -155,7 +155,7 @@ Here is a ready-to-flash C++ snippet for the ESP32 to push sensor readings direc
 // ================= CONFIG =================
 const char* WIFI_SSID = "moto edge 50 neo";       // <-- ADD THIS
 const char* WIFI_PASS = "11111111";   // <-- ADD THIS
-const char* DB_URL    = "https://roadsense-2b385-default-rtdb.firebaseio.com";
+const char* DB_URL    = "firebase rtdb url";
 
 #define TEST_MODE 1   // 1 = fake coordinates when GPS has no fix (indoor testing), 0 = real use only
 const double TEST_LAT = 16.4971, TEST_LNG = 80.4997;
