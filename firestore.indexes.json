@@ -1,0 +1,31 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "potholes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "lastDetectedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "potholes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "severity", "order": "ASCENDING" },
+        { "fieldPath": "lastDetectedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "potholes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "lastDetectedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAuthority() {
+      return isAuthenticated() && getUserData().role == 'authority';
+    }
+
+    function isDevice() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'device' ||
+        getUserData().role == 'device' ||
+        request.auth.token.firebase.sign_in_provider == 'anonymous'
+      );
+    }
+
+    // ==========================================
+    // POTHOLES COLLECTION
+    // ==========================================
+    match /potholes/{potholeId} {
+      // Public citizen & authority can read potholes on the live map
+      allow read: if true;
+
+      // Citizen public reporting:
+      // Can create if source is 'citizen', status is 'reported', and isDeleted is false
+      allow create: if request.resource.data.source == 'citizen'
+                    && request.resource.data.status == 'reported'
+                    && request.resource.data.isDeleted == false
+                    && request.resource.data.location.lat is number
+                    && request.resource.data.location.lng is number;
+
+      // Authority updates:
+      // Only authorized municipal staff can update status, assign department, mark completed, etc.
+      allow update: if isAuthority();
+
+      // No hard deletes allowed; authorities soft-delete via update { isDeleted: true }
+      allow delete: if false;
+
+      // Subcollection: Status History (Audit Trail)
+      match /statusHistory/{historyId} {
+        // Public can read timeline of public potholes
+        allow read: if true;
+        // Authority can append new history log entries
+        allow create: if isAuthority();
+        // Audit logs are immutable
+        allow update, delete: if false;
+      }
+    }
+
+    // ==========================================
+    // RAW READINGS (IoT Device Ingestion)
+    // ==========================================
+    match /readings/{readingId} {
+      // Authority can review raw telemetry readings
+      allow read: if isAuthority();
+
+      // Devices authenticated as device accounts or anonymous device tokens can push readings
+      // Must contain basic telemetry fields: deviceId, lat, lng, magnitude
+      allow create: if (isDevice() || isAuthority())
+                    && request.resource.data.deviceId is string
+                    && request.resource.data.lat is number
+                    && request.resource.data.lng is number
+                    && request.resource.data.magnitude is number;
+
+      allow update, delete: if isAuthority();
+    }
+
+    // ==========================================
+    // DEVICES METADATA
+    // ==========================================
+    match /devices/{deviceId} {
+      allow read: if isAuthority();
+      allow write: if isAuthority() || (isDevice() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen', 'battery', 'status']));
+    }
+
+    // ==========================================
+    // USERS (Roles and Profiles)
+    // ==========================================
+    match /users/{userId} {
+      // Users can read their own profile; authorities can read all profiles
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAuthority());
+
+      // Only authority provisioning or initial admin setup can set role = "authority"
+      // New self-registered citizens can only create account with role = 'citizen'
+      allow create: if isAuthenticated() && request.auth.uid == userId && (
+        request.resource.data.role == 'citizen' || isAuthority()
+      );
+
+      // Prevent privilege escalation: users CANNOT change their own role
+      allow update: if isAuthenticated() && (
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+        || isAuthority()
+      );
+
+      allow delete: if isAuthority();
+    }
+  }
+}

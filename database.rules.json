@@ -1,0 +1,20 @@
+{
+  "rules": {
+    "potholes": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["timestamp", "deviceId"]
+    },
+    "readings": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["timestamp", "deviceId"]
+    },
+    "devices": {
+      ".read": true,
+      ".write": true
+    },
+    ".read": "auth != null",
+    ".write": "auth != null"
+  }
+}
