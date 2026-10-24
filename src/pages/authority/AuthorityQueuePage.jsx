@@ -15,7 +15,7 @@ import {
   Clock,
   Eye
 } from 'lucide-react';
-import { subscribePotholes } from '../../lib/potholeService';
+import { subscribePotholes, getCachedPotholes } from '../../lib/potholeService';
 import { StatusBadge, SeverityBadge } from '../../components/common/Badges';
 import AuthorityActionDrawer from '../../components/authority/AuthorityActionDrawer';
 
@@ -51,8 +51,8 @@ function computePriority(pothole) {
 }
 
 export default function AuthorityQueuePage() {
-  const [potholes, setPotholes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [potholes, setPotholes] = useState(() => getCachedPotholes());
+  const [loading, setLoading] = useState(() => getCachedPotholes().length === 0);
   const [selectedPothole, setSelectedPothole] = useState(null);
 
   // Filters

@@ -13,12 +13,12 @@ import {
   ExternalLink,
   ShieldCheck
 } from 'lucide-react';
-import { subscribePotholes } from '../../lib/potholeService';
+import { subscribePotholes, getCachedPotholes } from '../../lib/potholeService';
 import AuthorityActionDrawer from '../../components/authority/AuthorityActionDrawer';
 
 export default function AuthorityCompletedPage() {
-  const [potholes, setPotholes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [potholes, setPotholes] = useState(() => getCachedPotholes());
+  const [loading, setLoading] = useState(() => getCachedPotholes().length === 0);
   const [selectedPothole, setSelectedPothole] = useState(null);
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'table'
   const [searchTerm, setSearchTerm] = useState('');

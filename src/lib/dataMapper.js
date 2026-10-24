@@ -180,6 +180,15 @@ export function normalizeDeviceReading(raw) {
   } else if (typeof timestamp === 'number') {
     // If epoch timestamp
     timestamp = new Date(timestamp > 1e11 ? timestamp : timestamp * 1000).toISOString();
+  } else if (typeof timestamp === 'string') {
+    const parsed = Date.parse(timestamp);
+    if (isNaN(parsed)) {
+      timestamp = new Date().toISOString();
+    } else {
+      timestamp = new Date(parsed).toISOString();
+    }
+  } else {
+    timestamp = new Date().toISOString();
   }
 
   return {

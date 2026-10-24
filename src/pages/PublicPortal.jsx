@@ -5,13 +5,13 @@ import PotholeMap from '../components/map/PotholeMap';
 import PublicTableView from '../components/public/PublicTableView';
 import PotholeDetailModal from '../components/potholes/PotholeDetailModal';
 import ReportPotholeModal from '../components/potholes/ReportPotholeModal';
-import { subscribePotholes, subscribeRealtimeDatabaseReadings } from '../lib/potholeService';
+import { subscribePotholes, subscribeRealtimeDatabaseReadings, getCachedPotholes } from '../lib/potholeService';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { AlertTriangle, Database, Info, Loader2, Sparkles } from 'lucide-react';
 
 export default function PublicPortal() {
-  const [potholes, setPotholes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [potholes, setPotholes] = useState(() => getCachedPotholes());
+  const [loading, setLoading] = useState(() => getCachedPotholes().length === 0);
   const [error, setError] = useState(null);
 
   const [activeTab, setActiveTab] = useState('map'); // 'map' | 'list'

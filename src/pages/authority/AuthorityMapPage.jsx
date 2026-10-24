@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import PotholeMap from '../../components/map/PotholeMap';
 import AuthorityActionDrawer from '../../components/authority/AuthorityActionDrawer';
-import { subscribePotholes } from '../../lib/potholeService';
+import { subscribePotholes, getCachedPotholes } from '../../lib/potholeService';
 import { Layers, Shield, AlertTriangle, CheckCircle2, Wrench, RefreshCw } from 'lucide-react';
 
 export default function AuthorityMapPage() {
-  const [potholes, setPotholes] = useState([]);
+  const [potholes, setPotholes] = useState(() => getCachedPotholes());
   const [selectedPothole, setSelectedPothole] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => getCachedPotholes().length === 0);
 
   // Status Filter
   const [statusFilter, setStatusFilter] = useState('all');

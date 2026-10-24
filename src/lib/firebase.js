@@ -9,7 +9,12 @@
  */
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  getFirestore
+} from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 
@@ -39,7 +44,21 @@ export function isFirebaseConfigured() {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Initialize Firestore with persistent IndexedDB caching & multi-tab coordination for instantaneous queries
+let dbInstance;
+try {
+  dbInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  });
+} catch (e) {
+  // If already initialized or persistent cache unsupported in browser mode
+  dbInstance = getFirestore(app);
+}
+
+export const db = dbInstance;
 export const storage = getStorage(app);
 export const rtdb = getDatabase(app);
 export default app;

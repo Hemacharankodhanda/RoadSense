@@ -11,11 +11,11 @@ import {
   Layers,
   FileText
 } from 'lucide-react';
-import { subscribePotholes } from '../../lib/potholeService';
+import { subscribePotholes, getCachedPotholes } from '../../lib/potholeService';
 
 export default function AuthorityReportsPage() {
-  const [potholes, setPotholes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [potholes, setPotholes] = useState(() => getCachedPotholes());
+  const [loading, setLoading] = useState(() => getCachedPotholes().length === 0);
 
   // Filter States
   const [statusFilter, setStatusFilter] = useState('all');
