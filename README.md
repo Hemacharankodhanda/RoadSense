@@ -393,9 +393,3 @@ npm run dev
 - Open `http://localhost:5173` for the **Public Citizen Portal**.
 - Open `http://localhost:5173/authority/login` to sign in as a **Municipal Officer**.
 
-### Step 8: Deploy to Production
-```bash
-npm run build
-firebase deploy --only hosting
-```
-Your application will be live on `https://your-project.web.app`!
