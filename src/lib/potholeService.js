@@ -17,7 +17,15 @@ import {
   query,
   onSnapshot
 } from 'firebase/firestore';
-import { ref as rtdbRef, onChildAdded, push as rtdbPush, set as rtdbSet } from 'firebase/database';
+import {
+  ref as rtdbRef,
+  onChildAdded,
+  onValue,
+  query as rtdbQuery,
+  limitToLast,
+  push as rtdbPush,
+  set as rtdbSet
+} from 'firebase/database';
 import { db, rtdb } from './firebase';
 import {
   createPotholeDocument,
@@ -28,10 +36,56 @@ import {
 } from './dataMapper';
 
 // ============================================================================
-// 1. MULTI-TIER CACHE (Zero-latency Hydration)
+// 1. MULTI-TIER CACHE (Zero-latency Hydration & Deduplication)
 // ============================================================================
 const STORAGE_KEY = 'roadsense_potholes_cache_v2';
 const GEOCODE_STORAGE_KEY = 'roadsense_geocode_cache_v2';
+
+function deduplicateAndSort(list) {
+  if (!Array.isArray(list)) return [];
+  const map = new Map();
+  for (const item of list) {
+    if (!item || !item.id) continue;
+    if (!map.has(item.id)) {
+      map.set(item.id, item);
+    } else {
+      const existing = map.get(item.id);
+      const tExist = new Date(existing.updatedAt || existing.lastDetectedAt || 0).getTime();
+      const tItem = new Date(item.updatedAt || item.lastDetectedAt || 0).getTime();
+      if (tItem >= tExist) {
+        map.set(item.id, { ...existing, ...item });
+      }
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    const tA = new Date(a.lastDetectedAt || a.firstDetectedAt || 0).getTime() || 0;
+    const tB = new Date(b.lastDetectedAt || b.firstDetectedAt || 0).getTime() || 0;
+    return tB - tA;
+  });
+}
+
+function arePotholeListsEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const pA = a[i];
+    const pB = b[i];
+    if (
+      pA.id !== pB.id ||
+      pA.status !== pB.status ||
+      pA.confirmationCount !== pB.confirmationCount ||
+      pA.severityScore !== pB.severityScore ||
+      pA.severity !== pB.severity ||
+      pA.lastDetectedAt !== pB.lastDetectedAt ||
+      pA.assignedDepartment !== pB.assignedDepartment ||
+      pA.expectedCompletionDate !== pB.expectedCompletionDate
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 // In-memory cache populated synchronously from localStorage on startup
 let cachedPotholes = [];
@@ -40,11 +94,27 @@ try {
   if (saved) {
     const parsed = JSON.parse(saved);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      cachedPotholes = parsed;
+      // Exclude dead optimistic items from previous sessions to prevent phantom counts
+      cachedPotholes = deduplicateAndSort(
+        parsed.filter(p => !p._optimistic && !p.id?.startsWith('optimistic_') && !p.id?.startsWith('citizen_opt_'))
+      );
     }
   }
 } catch (e) {
   // Ignore localStorage read errors in restricted contexts
+}
+
+let saveStorageTimeout = null;
+function scheduleSaveCache(data) {
+  if (saveStorageTimeout) clearTimeout(saveStorageTimeout);
+  saveStorageTimeout = setTimeout(() => {
+    try {
+      const cleanData = data.filter(
+        p => !p._optimistic && !p.id?.startsWith('optimistic_') && !p.id?.startsWith('citizen_opt_')
+      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanData));
+    } catch (e) {}
+  }, 300);
 }
 
 /**
@@ -166,28 +236,23 @@ let firestoreUnsubscribe = null;
 let rtdbUnsubscribe = null;
 let idleDisconnectTimer = null;
 const processedRtdbKeys = new Set();
-
-function sortPotholes(list) {
-  return [...list].sort((a, b) => {
-    const tA = new Date(a.lastDetectedAt || a.firstDetectedAt || 0).getTime() || 0;
-    const tB = new Date(b.lastDetectedAt || b.firstDetectedAt || 0).getTime() || 0;
-    return tB - tA;
-  });
-}
+let isFirestoreReady = false;
 
 function broadcastPotholes(potholes) {
-  cachedPotholes = sortPotholes(potholes);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedPotholes));
-  } catch (e) {}
+  const nextList = deduplicateAndSort(potholes);
+  const isChanged = !arePotholeListsEqual(cachedPotholes, nextList);
+  cachedPotholes = nextList;
+  scheduleSaveCache(cachedPotholes);
 
-  potholeSubscribers.forEach((cb) => {
-    try {
-      cb(cachedPotholes);
-    } catch (err) {
-      console.error('[RoadSense Stream] Subscriber error:', err);
-    }
-  });
+  if (isChanged) {
+    potholeSubscribers.forEach((cb) => {
+      try {
+        cb(cachedPotholes);
+      } catch (err) {
+        console.error('[RoadSense Stream] Subscriber error:', err);
+      }
+    });
+  }
 }
 
 /**
@@ -264,7 +329,8 @@ async function handleLiveReading(reading, key) {
     const optimisticPothole = {
       id: tempId,
       ...newDocData,
-      _optimistic: true
+      _optimistic: true,
+      _createdAt: Date.now()
     };
     broadcastPotholes([optimisticPothole, ...cachedPotholes]);
 
@@ -324,6 +390,7 @@ function startRealtimeConnection() {
       firestoreUnsubscribe = onSnapshot(
         q,
         (snapshot) => {
+          isFirestoreReady = true;
           const remoteList = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
@@ -335,9 +402,15 @@ function startRealtimeConnection() {
             }
           });
 
-          // Merge any temporary optimistic items that haven't landed in Firestore yet
+          // Merge any active optimistic items from current session that haven't landed in Firestore yet
           const remoteIds = new Set(remoteList.map(p => p.id));
-          const pendingOptimistic = cachedPotholes.filter(p => p._optimistic && !remoteIds.has(p.id));
+          const now = Date.now();
+          const pendingOptimistic = cachedPotholes.filter(p => {
+            if (!p._optimistic || remoteIds.has(p.id)) return false;
+            // Drop optimistic items older than 20 seconds to prevent ghost items
+            const optAge = now - (p._createdAt || now);
+            return optAge < 20000;
+          });
 
           broadcastPotholes([...remoteList, ...pendingOptimistic]);
         },
@@ -351,42 +424,68 @@ function startRealtimeConnection() {
   }
 
   // 2. Shared Realtime Database Live Bridge (/potholes and /readings)
+  // Queries only limitToLast(1) and skips the pre-existing boundary child,
+  // ensuring zero historical backlog replay, zero startup lag, and zero duplicate writes.
   if (!rtdbUnsubscribe) {
     try {
       const potholesRef = rtdbRef(rtdb, 'potholes');
-      const unsubPotholes = onChildAdded(potholesRef, async (snapshot) => {
+      let isInitialPotholeChildSkipped = false;
+      const qPotholes = rtdbQuery(potholesRef, limitToLast(1));
+
+      const unsubPotholes = onChildAdded(qPotholes, async (snapshot) => {
         const key = snapshot.key;
         const raw = snapshot.val();
         if (!raw) return;
+
+        // Skip the pre-existing historical boundary child
+        if (!isInitialPotholeChildSkipped) {
+          isInitialPotholeChildSkipped = true;
+          processedRtdbKeys.add(key);
+          return;
+        }
+
+        if (processedRtdbKeys.has(key)) return;
+        processedRtdbKeys.add(key);
 
         const reading = normalizeDeviceReading(raw);
         rtdbRawSubscribers.forEach(cb => {
           try { cb(reading); } catch (e) {}
         });
 
-        if (processedRtdbKeys.has(key)) return;
-        processedRtdbKeys.add(key);
-
-        await handleLiveReading(reading, key);
+        // Only ingest live events once Firestore has populated in-memory cache
+        if (isFirestoreReady) {
+          await handleLiveReading(reading, key);
+        }
       }, (err) => {
         console.warn('[RTDB Bridge] /potholes notice:', err.message);
       });
 
       const readingsRef = rtdbRef(rtdb, 'readings');
-      const unsubReadings = onChildAdded(readingsRef, async (snapshot) => {
+      let isInitialReadingChildSkipped = false;
+      const qReadings = rtdbQuery(readingsRef, limitToLast(1));
+
+      const unsubReadings = onChildAdded(qReadings, async (snapshot) => {
         const key = snapshot.key;
         const raw = snapshot.val();
         if (!raw) return;
+
+        if (!isInitialReadingChildSkipped) {
+          isInitialReadingChildSkipped = true;
+          processedRtdbKeys.add(key);
+          return;
+        }
+
+        if (processedRtdbKeys.has(key)) return;
+        processedRtdbKeys.add(key);
 
         const reading = normalizeDeviceReading(raw);
         rtdbRawSubscribers.forEach(cb => {
           try { cb(reading); } catch (e) {}
         });
 
-        if (processedRtdbKeys.has(key)) return;
-        processedRtdbKeys.add(key);
-
-        await handleLiveReading(reading, key);
+        if (isFirestoreReady) {
+          await handleLiveReading(reading, key);
+        }
       }, () => {});
 
       rtdbUnsubscribe = () => {
@@ -417,7 +516,9 @@ export function subscribePotholes(callback, onError) {
 
   // Synchronously emit cached data immediately (0ms delay!)
   if (cachedPotholes.length > 0) {
-    callback(cachedPotholes);
+    try {
+      callback(cachedPotholes);
+    } catch (e) {}
   }
 
   // Ensure listeners are running
@@ -434,6 +535,7 @@ export function subscribePotholes(callback, onError) {
           if (firestoreUnsubscribe) {
             firestoreUnsubscribe();
             firestoreUnsubscribe = null;
+            isFirestoreReady = false;
           }
           if (rtdbUnsubscribe) {
             rtdbUnsubscribe();
@@ -563,7 +665,7 @@ export async function createCitizenReport({
   });
 
   // Optimistic UI update
-  const optimisticDoc = { id: tempId, ...potholeData, _optimistic: true };
+  const optimisticDoc = { id: tempId, ...potholeData, _optimistic: true, _createdAt: Date.now() };
   broadcastPotholes([optimisticDoc, ...cachedPotholes]);
 
   // Background Firestore persistence
