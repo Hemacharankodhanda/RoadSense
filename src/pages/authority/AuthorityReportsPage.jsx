@@ -63,6 +63,7 @@ export default function AuthorityReportsPage() {
       'Longitude',
       'Geocoded Address',
       'Severity',
+      'Estimated Depth (cm)',
       'MPU6050 Magnitude (G)',
       'Status',
       'Source Channel',
@@ -91,6 +92,7 @@ export default function AuthorityReportsPage() {
       p.location?.lng || '',
       escapeCsv(p.address || ''),
       escapeCsv(p.severity || ''),
+      typeof p.depth_cm === 'number' && !isNaN(p.depth_cm) ? p.depth_cm.toFixed(1) : 'n/a',
       p.severityScore || '',
       escapeCsv(p.status || ''),
       escapeCsv(p.source || ''),
@@ -252,6 +254,7 @@ export default function AuthorityReportsPage() {
                 <th className="p-3">Pothole ID</th>
                 <th className="p-3">Address</th>
                 <th className="p-3">Severity</th>
+                <th className="p-3">Depth (cm)</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Source</th>
                 <th className="p-3">First Detected</th>
@@ -264,6 +267,20 @@ export default function AuthorityReportsPage() {
                   <td className="p-3 font-mono text-[11px] text-slate-400">#{item.id?.slice(0, 8)}</td>
                   <td className="p-3 max-w-xs truncate text-white">{item.address || 'Street defect'}</td>
                   <td className="p-3 font-bold uppercase text-[10px]">{item.severity}</td>
+                  <td className="p-3 whitespace-nowrap">
+                    {typeof item.depth_cm === 'number' && !isNaN(item.depth_cm) ? (
+                      <span className="inline-flex items-center gap-1">
+                        <span>{Number(item.depth_cm).toFixed(1)} cm</span>
+                        <span className={`text-[9px] px-1 rounded font-bold uppercase ${
+                          item.depth_cm >= 7 ? 'text-rose-400' : item.depth_cm >= 3 ? 'text-amber-400' : 'text-emerald-400'
+                        }`}>
+                          ({item.depth_cm >= 7 ? 'Deep' : item.depth_cm >= 3 ? 'Moderate' : 'Shallow'})
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 font-mono">n/a</span>
+                    )}
+                  </td>
                   <td className="p-3 capitalize">{item.status?.replace('_', ' ')}</td>
                   <td className="p-3 capitalize">{item.source}</td>
                   <td className="p-3 text-slate-400">{item.firstDetectedAt ? new Date(item.firstDetectedAt).toLocaleDateString() : 'N/A'}</td>

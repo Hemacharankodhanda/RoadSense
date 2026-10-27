@@ -354,6 +354,25 @@ export default function AuthorityActionDrawer({ pothole, onClose, onRefresh = ()
                     {pothole.source === 'device' ? 'Automated IoT Sensor Node' : 'Citizen Mobile Report'}
                   </span>
                 </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Est. depth</span>
+                  {typeof pothole.depth_cm === 'number' && !isNaN(pothole.depth_cm) ? (
+                    <span className="font-semibold text-slate-200 flex items-center gap-1.5">
+                      <span>{Number(pothole.depth_cm).toFixed(1)} cm</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                        pothole.depth_cm >= 7
+                          ? 'bg-rose-900/60 text-rose-300 border border-rose-700/50'
+                          : pothole.depth_cm >= 3
+                          ? 'bg-amber-900/60 text-amber-300 border border-amber-700/50'
+                          : 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50'
+                      }`}>
+                        {pothole.depth_cm >= 7 ? 'Deep' : pothole.depth_cm >= 3 ? 'Moderate' : 'Shallow'}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 font-mono">n/a</span>
+                  )}
+                </div>
                 {pothole.deviceIds && (
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">Patrol Device ID(s)</span>

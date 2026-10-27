@@ -79,7 +79,8 @@ function arePotholeListsEqual(a, b) {
       pA.severity !== pB.severity ||
       pA.lastDetectedAt !== pB.lastDetectedAt ||
       pA.assignedDepartment !== pB.assignedDepartment ||
-      pA.expectedCompletionDate !== pB.expectedCompletionDate
+      pA.expectedCompletionDate !== pB.expectedCompletionDate ||
+      pA.depth_cm !== pB.depth_cm
     ) {
       return false;
     }
@@ -277,6 +278,7 @@ async function handleLiveReading(reading, key) {
     const updatedSeverity = calculateSeverity(updatedScore);
     const updatedCount = (existingDoc.confirmationCount || 1) + 1;
     const updatedTimestamp = reading.timestamp || new Date().toISOString();
+    const updatedDepth = reading.depth_cm !== undefined ? reading.depth_cm : existingDoc.depth_cm;
 
     // 1. FAST OPTIMISTIC UI BROADCAST (< 15ms)
     const updatedList = cachedPotholes.map(p => {
@@ -287,7 +289,8 @@ async function handleLiveReading(reading, key) {
           lastDetectedAt: updatedTimestamp,
           severityScore: updatedScore,
           severity: updatedSeverity,
-          deviceIds: deviceIds
+          deviceIds: deviceIds,
+          depth_cm: updatedDepth
         };
       }
       return p;
@@ -303,7 +306,8 @@ async function handleLiveReading(reading, key) {
           lastDetectedAt: updatedTimestamp,
           severityScore: updatedScore,
           severity: updatedSeverity,
-          deviceIds: deviceIds
+          deviceIds: deviceIds,
+          ...(reading.depth_cm !== undefined ? { depth_cm: reading.depth_cm } : {})
         });
       } catch (err) {
         console.warn('[RTDB Ingest] Background updateDoc failed:', err.message);
@@ -322,7 +326,8 @@ async function handleLiveReading(reading, key) {
       severityScore: reading.magnitude || 2.5,
       deviceId: reading.deviceId,
       description: `Automated IoT impact spike detected (${reading.magnitude || 0}G)`,
-      address: fastAddress
+      address: fastAddress,
+      depth_cm: reading.depth_cm
     });
 
     // 1. FAST OPTIMISTIC UI BROADCAST (< 15ms)

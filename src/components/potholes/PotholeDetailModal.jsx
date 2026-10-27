@@ -143,6 +143,26 @@ export default function PotholeDetailModal({ pothole, onClose }) {
               </span>
             </div>
 
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Est. depth</span>
+              {typeof pothole.depth_cm === 'number' && !isNaN(pothole.depth_cm) ? (
+                <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                  <span>{Number(pothole.depth_cm).toFixed(1)} cm</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                    pothole.depth_cm >= 7
+                      ? 'bg-rose-100 text-rose-700'
+                      : pothole.depth_cm >= 3
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {pothole.depth_cm >= 7 ? 'Deep' : pothole.depth_cm >= 3 ? 'Moderate' : 'Shallow'}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-slate-400 font-medium">n/a</span>
+              )}
+            </div>
+
             {pothole.deviceIds && pothole.deviceIds.length > 0 && (
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Contributing Node IDs</span>

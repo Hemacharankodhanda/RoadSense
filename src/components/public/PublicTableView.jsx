@@ -46,6 +46,9 @@ export default function PublicTableView({
         const order = { high: 3, medium: 2, low: 1 };
         valA = order[a.severity] || 0;
         valB = order[b.severity] || 0;
+      } else if (sortField === 'depth_cm') {
+        valA = typeof a.depth_cm === 'number' && !isNaN(a.depth_cm) ? a.depth_cm : -1;
+        valB = typeof b.depth_cm === 'number' && !isNaN(b.depth_cm) ? b.depth_cm : -1;
       } else if (sortField === 'firstDetectedAt' || sortField === 'lastDetectedAt') {
         valA = new Date(valA || 0).getTime();
         valB = new Date(valB || 0).getTime();
@@ -155,6 +158,15 @@ export default function PublicTableView({
                   <ArrowUpDown className="w-3 h-3 text-slate-400" />
                 </div>
               </th>
+              <th
+                onClick={() => toggleSort('depth_cm')}
+                className="p-3.5 cursor-pointer hover:bg-slate-100 transition-colors"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Depth (cm)</span>
+                  <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                </div>
+              </th>
               <th className="p-3.5">Status</th>
               <th className="p-3.5">Source</th>
               <th
@@ -181,7 +193,7 @@ export default function PublicTableView({
           <tbody className="divide-y divide-slate-100 text-slate-700">
             {paginatedData.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-slate-400 italic">
+                <td colSpan={8} className="p-8 text-center text-slate-400 italic">
                   No potholes found matching your criteria.
                 </td>
               </tr>
@@ -205,6 +217,24 @@ export default function PublicTableView({
                   </td>
                   <td className="p-3.5 whitespace-nowrap">
                     <SeverityBadge severity={item.severity} score={item.severityScore} showScore />
+                  </td>
+                  <td className="p-3.5 whitespace-nowrap">
+                    {typeof item.depth_cm === 'number' && !isNaN(item.depth_cm) ? (
+                      <span className="inline-flex items-center gap-1.5 font-medium text-slate-800">
+                        <span>{Number(item.depth_cm).toFixed(1)} cm</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                          item.depth_cm >= 7
+                            ? 'bg-rose-100 text-rose-700'
+                            : item.depth_cm >= 3
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {item.depth_cm >= 7 ? 'Deep' : item.depth_cm >= 3 ? 'Moderate' : 'Shallow'}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 font-mono">n/a</span>
+                    )}
                   </td>
                   <td className="p-3.5 whitespace-nowrap">
                     <StatusBadge status={item.status} size="xs" />

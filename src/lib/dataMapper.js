@@ -28,7 +28,10 @@ export const FIRMWARE_KEY_MAP = {
   magnitude: ['magnitude', 'mag', 'impact', 'peak_g', 'g_force', 'accel_mag'],
 
   // Vehicle Telemetry
-  speed: ['speed', 'spd', 'velocity', 'gps_speed_kmh'],
+  speed: ['speed', 'spd', 'velocity', 'gps_speed_kmh', 'speed_kmh'],
+
+  // Estimated Depth
+  depth_cm: ['depth_cm', 'depth', 'est_depth'],
 
   // Hardware Metadata
   battery: ['battery', 'batt', 'vbat', 'battery_pct'],
@@ -191,6 +194,13 @@ export function normalizeDeviceReading(raw) {
     timestamp = new Date().toISOString();
   }
 
+  const rawDepth = extractField(raw, 'depth_cm');
+  const depth_cm = rawDepth !== null && rawDepth !== undefined && !isNaN(Number(rawDepth))
+    ? parseFloat(Number(rawDepth).toFixed(1))
+    : (raw?.depth_cm !== undefined && raw?.depth_cm !== null && !isNaN(Number(raw.depth_cm))
+        ? parseFloat(Number(raw.depth_cm).toFixed(1))
+        : undefined);
+
   return {
     deviceId,
     lat,
@@ -200,6 +210,7 @@ export function normalizeDeviceReading(raw) {
     accelZ: parseFloat(accelZ.toFixed(3)),
     magnitude: parseFloat(magnitude.toFixed(2)),
     speed: parseFloat(speed.toFixed(1)),
+    depth_cm,
     geohash: encodeGeohash(lat, lng, 8),
     timestamp
   };
@@ -217,7 +228,8 @@ export function createPotholeDocument({
   description = '',
   citizenEmail = null,
   imageUrl = null,
-  address = null
+  address = null,
+  depth_cm = null
 }) {
   const numericLat = Number(lat);
   const numericLng = Number(lng);
@@ -234,6 +246,7 @@ export function createPotholeDocument({
     address: address || `${numericLat.toFixed(5)}, ${numericLng.toFixed(5)}`,
     severity,
     severityScore: parseFloat(score.toFixed(2)),
+    depth_cm: depth_cm !== null && depth_cm !== undefined && !isNaN(Number(depth_cm)) ? parseFloat(Number(depth_cm).toFixed(1)) : null,
     status: 'reported', // 'reported' | 'verified' | 'in_progress' | 'repaired' | 'rejected'
     source,
     deviceIds: deviceId ? [deviceId] : [],

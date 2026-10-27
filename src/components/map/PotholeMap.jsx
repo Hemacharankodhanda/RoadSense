@@ -27,7 +27,11 @@ function createCustomPin(pothole, isSelected = false) {
   const status = pothole.status || 'reported';
   const color = STATUS_COLORS[status] || '#ef4444';
   const isHigh = pothole.severity === 'high';
-  const size = isSelected ? 42 : (isHigh ? 36 : 30);
+
+  // Optional: make the marker radius slightly larger for deeper potholes
+  const depthVal = typeof pothole.depth_cm === 'number' && !isNaN(pothole.depth_cm) ? Number(pothole.depth_cm) : null;
+  const depthBoost = depthVal !== null ? (depthVal >= 7 ? 6 : (depthVal >= 3 ? 3 : 0)) : 0;
+  const size = (isSelected ? 42 : (isHigh ? 36 : 30)) + depthBoost;
   const pulseClass = (isHigh && status !== 'repaired') ? 'pulse-high' : '';
 
   const html = `
@@ -214,6 +218,14 @@ export default function PotholeMap({
         onSelectPothole(pothole);
       });
 
+      // Estimated depth calculation & label
+      const hasDepth = typeof pothole.depth_cm === 'number' && !isNaN(pothole.depth_cm);
+      const depthVal = hasDepth ? Number(pothole.depth_cm) : null;
+      const depthLabel = depthVal !== null ? (depthVal >= 7 ? 'Deep' : depthVal >= 3 ? 'Moderate' : 'Shallow') : null;
+      const depthText = hasDepth
+        ? `Est. depth: ${depthVal.toFixed(1)} cm <span style="font-weight: 600; color: ${depthVal >= 7 ? '#e11d48' : depthVal >= 3 ? '#d97706' : '#059669'};">(${depthLabel})</span>`
+        : 'Est. depth: n/a';
+
       // Quick hover tooltip
       marker.bindTooltip(`
         <div style="font-family: inherit; font-size: 12px; font-weight: 500;">
@@ -222,6 +234,9 @@ export default function PotholeMap({
           </div>
           <div style="color: #64748b; font-size: 11px;">
             ${pothole.address || 'Street defect'}
+          </div>
+          <div style="font-size: 11px; margin-top: 2px; color: #334155;">
+            ${depthText}
           </div>
           <div style="font-size: 11px; margin-top: 2px; color: ${STATUS_COLORS[pothole.status] || '#ef4444'}; font-weight: 600;">
             Status: ${pothole.status?.replace('_', ' ').toUpperCase()}
