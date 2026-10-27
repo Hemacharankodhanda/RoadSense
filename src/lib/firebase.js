@@ -19,14 +19,14 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAql-5qr3jrqCnXgHAENTalahKM3ofH0GY",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "roadsense-2b385.firebaseapp.com",
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://roadsense-2b385-default-rtdb.firebaseio.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "roadsense-2b385",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "roadsense-2b385.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "141083975376",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:141083975376:web:295c7e5157b4006f03c8d5",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-CHFRBSJEWC"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || " VITE_FIREBASE_API_KEY ",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || " VITE_FIREBASE_AUTH_DOMAIN  ",
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || " VITE_FIREBASE_DATABASE_URL ",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || " VITE_FIREBASE_PROJECT_ID ",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || " VITE_FIREBASE_STORAGE_BUCKET ",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "VITE_FIREBASE_MESSAGING_SENDER_ID",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "VITE_FIREBASE_APP_ID",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "VITE_FIREBASE_MEASUREMENT_ID"
 };
 
 // Check if actual configuration keys have been provided in .env
