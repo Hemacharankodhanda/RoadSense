@@ -153,8 +153,8 @@ Here is a ready-to-flash C++ snippet for the ESP32 to push sensor readings direc
 #include <TinyGPSPlus.h>
 
 // ================= CONFIG =================
-const char* WIFI_SSID = "moto edge 50 neo";       // <-- ADD THIS
-const char* WIFI_PASS = "11111111";   // <-- ADD THIS
+const char* WIFI_SSID = "";       // <-- ADD THIS
+const char* WIFI_PASS = "";   // <-- ADD THIS
 const char* DB_URL    = "firebase rtdb url";
 
 #define TEST_MODE 1   // 1 = fake coordinates when GPS has no fix (indoor testing), 0 = real use only
